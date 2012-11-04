@@ -366,8 +366,11 @@ static void __init omap_gossamer_init_irq(void)
 {
 	omap_init_irq();
 	omap2_init_common_hw(h5ms2g22mfr_sdrc_params,
-			     omap3621_mpu_rate_table,
-			     omap3621_dsp_rate_table,
+			     omap3630_mpu_rate_table,
+			     omap3630_dsp_rate_table,
+//			     omap3630_l3_rate_table);
+//			     omap3621_mpu_rate_table,
+//			     omap3621_dsp_rate_table,
 			     omap3621_l3_rate_table);
 }
 

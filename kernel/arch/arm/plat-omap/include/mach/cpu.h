@@ -227,7 +227,7 @@ IS_OMAP_SUBCLASS(363x, 0x363)
 #if defined(CONFIG_MACH_OMAP3621_BOXER) ||\
 	defined(CONFIG_MACH_OMAP3621_EVT1A) ||\
 	defined(CONFIG_MACH_OMAP_3621_EDP) ||\
-	defined(CONFIG_MACH_OMAP3621_GOSSAMER)
+	defined(CONFIG_MACH_OMAP3621_GOSSAMER_NOO)
 # undef cpu_is_omap3621
 # define cpu_is_omap3621()  is_omap363x()
 # undef cpu_is_omap3622

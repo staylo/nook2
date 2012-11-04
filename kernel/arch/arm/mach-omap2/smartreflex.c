@@ -86,7 +86,7 @@ struct omap_sr {
 #if !(defined(CONFIG_MACH_OMAP3621_BOXER) ||\
 	defined(CONFIG_MACH_OMAP3621_EVT1A) ||\
 	defined(CONFIG_MACH_OMAP3621_EDP) ||\
-	defined(CONFIG_MACH_OMAP3621_GOSSAMER))
+	defined(CONFIG_MACH_OMAP3621_GOSSAMER_NOO))
 	u32		opp5_nvalue, opp6_nvalue, opp4_nvalue;
 #endif
 	u32		senp_mod, senn_mod;
@@ -346,7 +346,7 @@ static void sr_add_margin_steps(struct omap_sr *sr)
 #if defined(CONFIG_MACH_OMAP3621_BOXER) ||\
 	defined(CONFIG_MACH_OMAP3621_EVT1A) ||\
 	defined(CONFIG_MACH_OMAP3621_EDP) ||\
-	defined(CONFIG_MACH_OMAP3621_GOSSAMER)
+	defined(CONFIG_MACH_OMAP3621_GOSSAMER_NOO)
 	sr1_opp_margin[4] = sr_margin_steps_1g;
 	sr1_opp_margin[5] = sr_margin_steps_1p3;
 #endif
@@ -375,7 +375,7 @@ static void sr_set_testing_nvalues(struct omap_sr *sr)
 #if !(defined(CONFIG_MACH_OMAP3621_BOXER) ||\
 	defined(CONFIG_MACH_OMAP3621_EVT1A) ||\
 	defined(CONFIG_MACH_OMAP3621_EDP) ||\
-	defined(CONFIG_MACH_OMAP3621_GOSSAMER))
+	defined(CONFIG_MACH_OMAP3621_GOSSAMER_NOO))
 			sr->opp4_nvalue = cal_test_nvalue(1842, 1580);
 			sr->opp5_nvalue = cal_test_nvalue(1842, 1580);
 #endif
@@ -385,7 +385,7 @@ static void sr_set_testing_nvalues(struct omap_sr *sr)
 #if !(defined(CONFIG_MACH_OMAP3621_BOXER) ||\
 	defined(CONFIG_MACH_OMAP3621_EVT1A) ||\
 	defined(CONFIG_MACH_OMAP3621_EDP) ||\
-	defined(CONFIG_MACH_OMAP3621_GOSSAMER))
+	defined(CONFIG_MACH_OMAP3621_GOSSAMER_NOO))
 		else {
 		sr->senp_mod = 0x03;	/* SenN-M5 enabled */
 		sr->senn_mod = 0x03;
@@ -442,7 +442,7 @@ u32 sr_read_efuse_nvalues(int opp_no)
 #if !(defined(CONFIG_MACH_OMAP3621_BOXER) ||\
 	defined(CONFIG_MACH_OMAP3621_EVT1A) ||\
 	defined(CONFIG_MACH_OMAP3621_EDP) ||\
-	defined(CONFIG_MACH_OMAP3621_GOSSAMER))
+	defined(CONFIG_MACH_OMAP3621_GOSSAMER_NOO))
 		case VDD1_OPP4:
 			return omap_ctrl_readl(OMAP36XX_CONTROL_FUSE_OPP4_VDD1);
 		case VDD1_OPP5:
@@ -467,7 +467,7 @@ static void sr_set_efuse_nvalues(struct omap_sr *sr)
 #if !(defined(CONFIG_MACH_OMAP3621_BOXER) ||\
 	defined(CONFIG_MACH_OMAP3621_EVT1A) ||\
 	defined(CONFIG_MACH_OMAP3621_EDP) ||\
-	defined(CONFIG_MACH_OMAP3621_GOSSAMER))
+	defined(CONFIG_MACH_OMAP3621_GOSSAMER_NOO))
 			sr->opp5_nvalue = sr1_opp[5] =
 			   omap_ctrl_readl(OMAP36XX_CONTROL_FUSE_OPP5_VDD1);
 			if (sr->opp5_nvalue != 0x0) {
@@ -541,7 +541,7 @@ static void sr_set_efuse_nvalues(struct omap_sr *sr)
 #if !(defined(CONFIG_MACH_OMAP3621_BOXER) ||\
 	defined(CONFIG_MACH_OMAP3621_EVT1A) ||\
 	defined(CONFIG_MACH_OMAP3621_EDP) ||\
-	defined(CONFIG_MACH_OMAP3621_GOSSAMER))
+	defined(CONFIG_MACH_OMAP3621_GOSSAMER_NOO))
 			sr->opp5_nvalue = omap_ctrl_readl(
 						OMAP343X_CONTROL_FUSE_OPP5_VDD1);
 			if (sr->opp5_nvalue != 0x0) {
@@ -566,7 +566,7 @@ static void sr_set_efuse_nvalues(struct omap_sr *sr)
 #if !(defined(CONFIG_MACH_OMAP3621_BOXER) ||\
 	defined(CONFIG_MACH_OMAP3621_EVT1A) ||\
 	defined(CONFIG_MACH_OMAP3621_EDP) ||\
-	defined(CONFIG_MACH_OMAP3621_GOSSAMER))
+	defined(CONFIG_MACH_OMAP3621_GOSSAMER_NOO))
 			if (sr->opp5_nvalue) {
 				sr->opp6_nvalue = calculate_opp_nvalue(sr->opp5_nvalue,
 				227, 379);
@@ -999,7 +999,7 @@ static int sr_enable(struct omap_sr *sr, u32 target_opp_no)
 #if !(defined(CONFIG_MACH_OMAP3621_BOXER) ||\
 	defined(CONFIG_MACH_OMAP3621_EVT1A) ||\
 	defined(CONFIG_MACH_OMAP3621_EDP) ||\
-	defined(CONFIG_MACH_OMAP3621_GOSSAMER))
+	defined(CONFIG_MACH_OMAP3621_GOSSAMER_NOO))
 		case 6:
 			nvalue_reciprocal = sr->opp6_nvalue;
 			break;

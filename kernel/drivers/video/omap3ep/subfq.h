@@ -32,7 +32,6 @@ extern size_t omap3epfb_bfb_size(struct fb_info *info);
 extern int omap3epfb_update_screen(struct fb_info *info, int wvfid,
 							bool retry_req);
 
-
 /* Issue asynchronous update request. The main difference from
  * omap3epfb_update_screen() is that this can be called in a burst and
  * only the last call will initiate a screen update. This is very similar

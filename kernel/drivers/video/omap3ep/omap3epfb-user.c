@@ -48,6 +48,40 @@
 #define TIME_STAMP() ktime_to_us(ktime_get())
 #define TIME_DELTA_MS(x) ((u32)(ktime_to_us(ktime_get())-(x)) / 1000)
 
+static int fast=0;
+int skip=0;
+int omap3epfb_reset_region(struct fb_info *info, int mask);
+
+static ssize_t show_mode(struct device *device,
+			    struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fb = dev_get_drvdata(device);
+	struct omap3epfb_par *par = fb->par;
+	return snprintf(buf, PAGE_SIZE, "%d\n", par->fmode);
+}
+
+static ssize_t change_mode(struct device *device,
+			  struct device_attribute *attr,
+			  const char *buf, size_t count)
+{
+	struct fb_info *fb = dev_get_drvdata(device);
+	struct omap3epfb_par *par = fb->par;
+	int tmp  = simple_strtoul(buf, NULL, 0);
+
+	par->fmode = tmp;
+	switch (tmp)
+	{
+		case 1:	fast=1;
+			omap3epfb_update_screen(par->info, OMAP3EPFB_WVFID_VU, true);
+			break;
+		default: fast=0;
+			break;
+	}
+
+	return count;
+}
+
+
 static inline u32 ktime_to_ms(void)
 {
     ktime_t tm = ktime_get();
@@ -95,6 +129,29 @@ enum {
 #define DEBUG_LOG(level,fmt, args...) \
 	do { if (par->user_debug & level) { printk("EPD|%s| ",par->effect_active_debug); printk(fmt, ## args); } } while (0)
 
+static void omap3epfb_lost_update(struct work_struct *work)
+{
+	struct omap3epfb_par *par = container_of(work,
+		struct omap3epfb_par,
+		lost_update.work);
+
+		printk("lost_update\n");
+//	if (skip==1) {
+		cancel_delayed_work_sync(&par->clear_work);
+		cancel_delayed_work_sync(&par->disable_work);
+	g_disable_time = 0;  // Reset expiration time
+	par->disable_flags = 0;
+	par->last_clear = TIME_STAMP();
+
+		omap3epfb_reqq_purge(par->info);
+		if (fast==0) {
+			omap3epfb_update_screen(par->info, OMAP3EPFB_WVFID_GU, false);
+		} else {
+			omap3epfb_update_screen(par->info, OMAP3EPFB_WVFID_VU, false);
+		}
+//	}
+}
+
 static void omap3epfb_clear_work(struct work_struct *work)
 {
 	struct omap3epfb_par *par = container_of(work,
@@ -104,7 +161,12 @@ static void omap3epfb_clear_work(struct work_struct *work)
 	DEBUG_LOG(DEBUG_LEVEL2,"delayed FULLSCREEN Update\n");
 
 	omap3epfb_reqq_purge(par->info);
-	omap3epfb_update_screen(par->info, OMAP3EPFB_WVFID_GC, false);
+	if  (fast==0) {
+		omap3epfb_update_screen(par->info, OMAP3EPFB_WVFID_GC, false);
+		skip=0;
+	} else {
+		omap3epfb_update_screen(par->info, OMAP3EPFB_WVFID_VU, false);
+	}
 }
 
 static void omap3epfb_disable_work(struct work_struct *work)
@@ -119,7 +181,12 @@ static void omap3epfb_disable_work(struct work_struct *work)
 	DEBUG_LOG(DEBUG_LEVEL2,"delayed enable EPD Updates\n");
 
 	omap3epfb_reqq_purge(par->info);
-	omap3epfb_update_screen(par->info, OMAP3EPFB_WVFID_GC, false);
+	if  (fast==0)  {
+		omap3epfb_update_screen(par->info, OMAP3EPFB_WVFID_GC, false);
+		skip=0;
+	} else {
+		omap3epfb_update_screen(par->info, OMAP3EPFB_WVFID_VU, false);
+	}
 }
 
 
@@ -144,9 +211,9 @@ static void rect_dump(struct omap3epfb_update_area *a)
 	static const char *wvfid_str[OMAP3EPFB_WVFID_NUM] = {
 		"GC", "GU", "DU", "A2", "GL", "X1", "X2"
 	};
-	static const char *wvfm_vl_mode = "VU"; 
-	static const char *wvfm_auto_mode = "AT"; 
-	static const char *wvfm_undefined = "XX"; 
+	static const char *wvfm_vl_mode = "VU";
+	static const char *wvfm_auto_mode = "AT";
+	static const char *wvfm_undefined = "XX";
 	char const *txt = wvfm_undefined;
 
 	if ((a->wvfid >= 0) && (a->wvfid < OMAP3EPFB_WVFID_NUM))
@@ -189,7 +256,7 @@ static bool rect_inside(struct omap3epfb_update_area *a, struct omap3epfb_update
 
 static bool rect_equal(struct omap3epfb_update_area *a, struct omap3epfb_update_area *b)
 {
-    if ((b->x0 == a->x0) && 
+    if ((b->x0 == a->x0) &&
         (b->x1 == a->x1) &&
         (b->y0 == a->y0) &&
         (b->y1 == a->y1))
@@ -204,7 +271,11 @@ static bool rect_fullscreen(struct fb_info *info, struct omap3epfb_update_area *
 	full.y0 = 0;
 	full.x1 = info->var.xres-1;
 	full.y1 = info->var.yres-1;
-	full.wvfid = OMAP3EPFB_WVFID_GC;
+	if  (fast==0)  {
+		full.wvfid = OMAP3EPFB_WVFID_GC;
+	} else {
+		full.wvfid = OMAP3EPFB_WVFID_VU;
+	}
 	full.threshold = 0;
 
 	return rect_equal(&full, p);
@@ -226,7 +297,11 @@ static bool batch_update(struct fb_info *info, struct omap3epfb_update_area *p)
 	if (!par->clear_delay)
 	{
 		DEBUG_REGION(DEBUG_LEVEL1, p,"   do = ");
-		omap3epfb_update_area(info, p);
+		if (fast==1) {
+			omap3epfb_update_screen(par->info, OMAP3EPFB_WVFID_VU, false);
+		} else {
+			omap3epfb_update_area(info, p);
+		}
 		return false;
 	}
 
@@ -237,7 +312,11 @@ static bool batch_update(struct fb_info *info, struct omap3epfb_update_area *p)
 		if (!delayed_work_pending(&par->clear_work))
 		{
 			DEBUG_REGION(DEBUG_LEVEL1, p,"   do = ");
-			omap3epfb_update_area(info, p);
+			if (fast==1) {
+				omap3epfb_update_screen(par->info, OMAP3EPFB_WVFID_VU, false);
+			} else {
+				omap3epfb_update_area(info, p);
+			}
 		}
 		else
 		{
@@ -314,6 +393,9 @@ inline int line_diff(void *p1, void *p2, int length)
 //       if a small percent has changed.  For those cases, it is better to use the
 //       update areas implemented in this driver.
 
+//HACK
+u32 time_last=0;
+
 static bool buffer_difference_ge_threshold(struct fb_info *info, int percent_threshold)
 {
 	struct omap3epfb_par *par = info->par;
@@ -325,6 +407,13 @@ static bool buffer_difference_ge_threshold(struct fb_info *info, int percent_thr
 	int max_y_equal = (y_res * (100 - percent_threshold)) / 100;
 	int y_equal = 0;
 	bool result = true;
+	u32 time_act;
+
+
+	time_act=ktime_to_ms();
+	if ((time_act - time_last) < 6000) {
+		return false;
+	}
 
 	u8 *front = info->screen_base;
 	u8 *back = info->screen_base + buffer_size;
@@ -333,6 +422,7 @@ static bool buffer_difference_ge_threshold(struct fb_info *info, int percent_thr
 	// Same for percent greater than 100 since it's invalid
 	if ((percent_threshold <= 0) || (percent_threshold > 100))
 	{
+		time_last=time_act;
 		return true;
 	}
 
@@ -378,7 +468,9 @@ static bool buffer_difference_ge_threshold(struct fb_info *info, int percent_thr
 			line -= line_length;
 		}
 	}
-
+	if (result) {
+		time_last=time_act;
+	}
 	DEBUG_LOG(DEBUG_LEVEL5,"buffer difference: threshold = %d%%, top = %d, bottom = %d, max_y_equal = %d, y_equal = %d, result = %s\n", percent_threshold, top, bottom, max_y_equal, y_equal, result ? "TRUE" : "FALSE");
 	return (result);
 }
@@ -400,7 +492,11 @@ static int process_area(int index, struct fb_info *info, struct omap3epfb_area *
 
 	if (area->effect_flags & EFFECT_ONESHOT)
 	{
-		p->wvfid = area->effect_area.wvfid;
+		if (fast == 1) {
+			p->wvfid = OMAP3EPFB_WVFID_VU;
+		} else {
+			p->wvfid = area->effect_area.wvfid;
+		}
 		p->threshold = area->effect_area.threshold;
 		DEBUG_REGION(DEBUG_LEVEL2, p,"process ONESHOT region %d = ", index);
 		if (area->effect_flags & EFFECT_REGION)
@@ -415,7 +511,11 @@ static int process_area(int index, struct fb_info *info, struct omap3epfb_area *
 	}
 	else if (area->effect_flags & EFFECT_ACTIVE)
 	{
-		p->wvfid = area->effect_area.wvfid;
+		if (fast == 1) {
+			p->wvfid = OMAP3EPFB_WVFID_VU;
+		} else {
+			p->wvfid = area->effect_area.wvfid;
+		}
 		p->threshold = area->effect_area.threshold;
 		DEBUG_REGION(DEBUG_LEVEL2, p,"process ACTIVE region %d = ", index);
 		change = 1;
@@ -432,7 +532,11 @@ static int process_area(int index, struct fb_info *info, struct omap3epfb_area *
 				p->x0 = p->y0 = 0;
 				p->x1 = info->var.xres-1;
 				p->y1 = info->var.yres-1;
-				p->wvfid = OMAP3EPFB_WVFID_GC;
+				if  (fast==0)  {
+					p->wvfid = OMAP3EPFB_WVFID_GC;
+				} else {
+					p->wvfid = OMAP3EPFB_WVFID_VU;
+				}
 				p->threshold = 0;
 			}
 		}
@@ -452,13 +556,21 @@ static int process_area(int index, struct fb_info *info, struct omap3epfb_area *
 		// Turn the next update of the effect area into a full page flushing update,
 		// then clear the effect area.
 		// This is used as a hint that a dialog is closing, then we forcing a full screen GC update.
-		p->wvfid = area->effect_area.wvfid;
+		if (fast == 1) {
+			p->wvfid = OMAP3EPFB_WVFID_VU;
+		} else {
+			p->wvfid = area->effect_area.wvfid;
+		}
 		p->threshold = area->effect_area.threshold;
 		DEBUG_REGION(DEBUG_LEVEL2, p,"process RESET region %d = ", index);
 		p->x0 = p->y0 = 0;
 		p->x1 = info->var.xres-1;
 		p->y1 = info->var.yres-1;
-		p->wvfid = OMAP3EPFB_WVFID_GC;
+		if  (fast==0)  {
+			p->wvfid = OMAP3EPFB_WVFID_GC;
+		} else {
+			p->wvfid = OMAP3EPFB_WVFID_VU;
+		}
 		par->effect_array[index].effect_flags = 0;
 		change = 1;
 	}
@@ -470,7 +582,7 @@ static int process_area(int index, struct fb_info *info, struct omap3epfb_area *
 }
 
 // Find the area that this update fit into.
-// Then modify the update --> apply the waveform and flags from the matching area.  
+// Then modify the update --> apply the waveform and flags from the matching area.
 static int waveform_select(struct fb_info *info, struct omap3epfb_update_area *p)
 {
 	struct omap3epfb_par *par = info->par;
@@ -525,7 +637,7 @@ static int waveform_decompose(struct fb_info *info, struct omap3epfb_update_area
 				new_effect_area.effect_area = *p;
 				new_effect_area.effect_area.wvfid = par->effect_array[i].effect_area.wvfid;
 				new_effect_area.effect_flags = par->effect_array[i].effect_flags;
- 
+
 				if ((par->effect_active & (1 << i)) &&
 				    process_area(i, info, &new_effect_area, &new_sub_area))
 				{
@@ -552,6 +664,12 @@ static int waveform_decompose(struct fb_info *info, struct omap3epfb_update_area
 	return ret;
 }
 
+static u32 time_last2=0;
+
+
+
+
+
 int user_update(struct fb_info *info, struct omap3epfb_update_area *p)
 {
 	struct omap3epfb_par *par = info->par;
@@ -577,7 +695,26 @@ int user_update(struct fb_info *info, struct omap3epfb_update_area *p)
 		return 0;
 	}
 	DEBUG_REGION(DEBUG_LEVEL5, p,"update REQUEST = ");
-	
+
+
+
+
+	if (fast==1) {
+		if ((start_time - time_last2) < 75) {
+			cancel_delayed_work_sync(&par->lost_update);
+			schedule_delayed_work(&par->lost_update, msecs_to_jiffies(500));
+			skip=1;
+			return 0;
+		}
+		p->wvfid = OMAP3EPFB_WVFID_VU;
+	} else {
+		if ((start_time - time_last2) < 750) {
+			cancel_delayed_work_sync(&par->lost_update);
+			schedule_delayed_work(&par->lost_update, msecs_to_jiffies(175));
+			skip=1;
+			return 0;
+		}
+
 	if (waveform_select(info, p))
 	{
 		// Tell the caller not to update.
@@ -590,33 +727,37 @@ int user_update(struct fb_info *info, struct omap3epfb_update_area *p)
 		return 0;
 	}
 
-	// Calculate the percentage of the screen that needs an update.
-	percent = ((rect_width(p) * rect_height(p) * 100)) /
-		   ((info->var.xres-1) * (info->var.yres-1));
+			// Calculate the percentage of the screen that needs an update.
+			percent = ((rect_width(p) * rect_height(p) * 100)) /
+				   ((info->var.xres-1) * (info->var.yres-1));
 
-	// Check if we need to do a GC of the whole screen
-	if ((par->refresh_percent > 0) && (percent >= par->refresh_percent))
-	{
-		// Check again if this needs to be flushing.
-		if (buffer_difference_ge_threshold(info, par->refresh_percent))
-		{
-			DEBUG_REGION(DEBUG_LEVEL1, p,"process FULLSCREEN %d%% AUTO = ", percent);
-			p->x0 = p->y0 = 0;
-			p->x1 = info->var.xres-1;
-			p->y1 = info->var.yres-1;
-			p->wvfid = OMAP3EPFB_WVFID_GC;
-			p->threshold = 0;
-		}
-		else
-		{
-			DEBUG_REGION(DEBUG_LEVEL1, p,"process false FULLSCREEN %d%% AUTO = ", percent);
-		}
-	}
-	else
-	{
-		DEBUG_REGION(DEBUG_LEVEL1, p,"process AUTO = ");
-	}
+			// Check if we need to do a GC of the whole screen
+			if ((par->refresh_percent > 0) && (percent >= par->refresh_percent))
+			{
+				// Check again if this needs to be flushing.
+				if (buffer_difference_ge_threshold(info, par->refresh_percent))
+				{
+					DEBUG_REGION(DEBUG_LEVEL1, p,"process FULLSCREEN %d%% AUTO = ", percent);
+					p->x0 = p->y0 = 0;
+					p->x1 = info->var.xres-1;
+					p->y1 = info->var.yres-1;
+					p->wvfid = OMAP3EPFB_WVFID_GC;
+					p->threshold = 0;
+					cancel_delayed_work_sync(&par->lost_update);
+				}
+				else
+				{
+					DEBUG_REGION(DEBUG_LEVEL1, p,"process false FULLSCREEN %d%% AUTO = ", percent);
+				}
+			}
+			else
+			{
+				DEBUG_REGION(DEBUG_LEVEL1, p,"process AUTO = ");
+			}
 
+	}
+	skip=0;
+	time_last2=start_time;
 	batch_update(info, p);
 
 	// Tell the caller not to update.
@@ -726,20 +867,38 @@ static ssize_t store_refresh(struct device *device,
 	omap3epfb_reqq_purge(fb);
 	switch (clear)
 	{
-		case 0: omap3epfb_update_screen(fb, OMAP3EPFB_WVFID_AUTO, false);
+		case 0:
+			if  (fast==0)  {
+				omap3epfb_update_screen(fb, OMAP3EPFB_WVFID_AUTO, false);
+				skip=0;
+			} else {
+				omap3epfb_update_screen(fb, OMAP3EPFB_WVFID_VU, false);
+			}
 			break;
 
-		case 1: omap3epfb_update_screen(fb, OMAP3EPFB_WVFID_GC, false);
+		case 1:
+			if  (fast==0)  {
+				omap3epfb_update_screen(fb, OMAP3EPFB_WVFID_GC, false);
+				skip=0;
+			} else {
+				omap3epfb_update_screen(fb, OMAP3EPFB_WVFID_VU, false);
+			}
 			break;
 
 		case 2: area = &par->effect_array[index];
 			if (!(area->effect_flags & (EFFECT_ONESHOT | EFFECT_ACTIVE | EFFECT_CLEAR)))
 				break;
 			omap3epfb_update_area(fb, &area->effect_area);
+			skip=0;
 			break;
 
 		default:
-			omap3epfb_update_screen(fb, OMAP3EPFB_WVFID_AUTO, false);
+			if  (fast==0)  {
+				omap3epfb_update_screen(fb, OMAP3EPFB_WVFID_AUTO, false);
+				skip=0;
+			} else {
+				omap3epfb_update_screen(fb, OMAP3EPFB_WVFID_VU, false);
+			}
 	}
 
 	return count;
@@ -762,7 +921,7 @@ static ssize_t store_disable(struct device *device,
 
 	if (tmp < 0)
 		return -EINVAL;
-		
+
 	par->disable_flags = tmp;
 
 	if (tmp > 0)
@@ -835,7 +994,7 @@ static ssize_t store_area(struct device *device,
 	if (last - buf >= count)
 		return -EINVAL;
 
-	// Threshold stored in upper 16 bits.	
+	// Threshold stored in upper 16 bits.
 	// Waveform id in lower 16 bits.
 	wvfid = simple_strtoul(last, &last, 0);
 	last++;
@@ -981,6 +1140,7 @@ static struct device_attribute device_attrs[] = {
 	__ATTR(epd_debug,      S_IRUGO|S_IWUSR, show_debug, store_debug),
 	__ATTR(pgflip_refresh, S_IRUGO|S_IWUGO, show_pgflip, store_pgflip),
 	__ATTR(cpld_hw_rev,    S_IRUGO|S_IWUSR, show_cpld_hw_rev, NULL),
+	__ATTR(fmode,    S_IRUGO|S_IWUGO, show_mode, change_mode),
 };
 
 
@@ -1005,6 +1165,7 @@ int user_init_device(struct fb_info *fb_info)
 			device_remove_file(fb_info->dev, &device_attrs[i]);
 		fb_info->class_flag &= ~FB_SYSFS_FLAG_ATTR;
 	}
+	INIT_DELAYED_WORK_DEFERRABLE(&par->lost_update, omap3epfb_lost_update);
 	INIT_DELAYED_WORK_DEFERRABLE(&par->clear_work, omap3epfb_clear_work);
 	INIT_DELAYED_WORK_DEFERRABLE(&par->disable_work, omap3epfb_disable_work);
 
@@ -1034,5 +1195,6 @@ void user_cleanup_device(struct fb_info *fb_info)
 	}
 	cancel_delayed_work_sync(&par->clear_work);
 	cancel_delayed_work_sync(&par->disable_work);
+	cancel_delayed_work_sync(&par->lost_update);
 	g_disable_time = 0;  // Reset expiration time
 }

@@ -114,7 +114,7 @@ struct omap3epfb_par {
 	bool dsp_pm_sleep;              /*DSPSN in is sleep mode*/
 	/* For tracking register daemon and deferred io*/
 	struct timer_list timer;
-	
+
 	/* blitter FB */
 	struct {
 		struct omap3epfb_buffer	mem;
@@ -141,12 +141,12 @@ struct omap3epfb_par {
 		struct omap3epfb_sharedbuf shstats;/* DSP writes stats here */
 #if defined(CONFIG_FB_OMAP3EP_DRIVE_EPAPER_PANEL_DSS)
 		struct omap3epfb_subfbuf bufs[OMAP3EPFB_SUBFQ_DEPTH];
-		
+
 		struct omap3epfb_subfbuf idlesubf;
 //		bool last_subf_queued;	/* whether the last one is queued */
 		bool first_irq_req;	/* helper for IRQ handler */
 		bool sequence_finished;	/* helper for IRQ handler */
-		
+
 		/*
 		 * Wait queue for free buffers.
 		 * Completions are not suitable here due to possible race
@@ -227,7 +227,7 @@ struct omap3epfb_par {
 	struct omap3epfb_epd_fixpar epd_fixpar;
 	struct omap3epfb_epd_varpar epd_varpar;
 	unsigned int last_yoffset;
-    
+
 	struct semaphore screen_update_mutex;
 
 	struct pmic_sess *pwr_sess;
@@ -242,6 +242,7 @@ struct omap3epfb_par {
 		struct fb_deferred_io defio;
 	} fbvars;
 	bool pgflip_refresh;
+	int fmode;
 	int user_debug;
 	int refresh_percent; /* % == 0, Normal update, % > 0 == GC Update */
 	int disable_flags;
@@ -249,6 +250,7 @@ struct omap3epfb_par {
 	struct mutex area_mutex;
 	int effect_active;
 	char effect_active_debug[EFFECT_ARRAY_SIZE+1];
+	struct delayed_work lost_update;
 	struct delayed_work clear_work;
 	struct delayed_work disable_work;
 	int clear_delay;

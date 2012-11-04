@@ -6,6 +6,7 @@
 
 HEAD	= head.o
 OBJS	= misc.o
+plus_sec := $(call as-instr,.arch_extension sec,+sec)
 FONTC	= $(srctree)/drivers/video/console/font_acorn_8x8.c
 
 #
@@ -76,7 +77,7 @@ KBUILD_CFLAGS = $(subst -pg, , $(ORIG_CFLAGS))
 endif
 
 EXTRA_CFLAGS  := -fpic -fno-builtin
-EXTRA_AFLAGS  := -Wa,-march=all
+EXTRA_AFLAGS  := -Wa,-march=armv7-a$(plus_sec)
 
 # Supply ZRELADDR, INITRD_PHYS and PARAMS_PHYS to the decompressor via
 # linker symbols.  We only define initrd_phys and params_phys if the

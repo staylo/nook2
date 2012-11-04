@@ -679,6 +679,36 @@ static int process_bist_response(struct zforce *tsc, const u8* payload)
 	memcpy(pyld, payload, len);
 	return len;
 }
+static void update_tinfo(struct zforce *tsc, u8* payload)
+{
+	int count = payload[0];
+	int i;
+
+	if (count > ZF_NUM_FINGER_SUPPORT)
+	{
+		dev_dbg(&tsc->client->dev, "Invalid finger count %d\n", count);
+		return;
+	}
+
+	for (i = 0; i < count; i++)
+	{
+		u8 *data = payload + 1 + i * ZF_COORDATA_SIZE;
+		int state = (data[4] & 0xC0) >> 6;
+		int id = (data[4] & 0x3C) >> 2;
+		if (id != 1 && id != 2)
+		{
+			dev_dbg(&tsc->client->dev, "Invalid touch id %d\n", id);
+			continue;
+		}
+
+		tinfo[id - 1].x = data[1] << 8 | data[0];
+		tinfo[id - 1].y = data[3] << 8 | data[2];
+		tinfo[id - 1].z = state == STATE_UP ? 0 : 20;
+		tinfo[id - 1].state = state;
+		tinfo[id - 1].valid = 1;
+	}
+}
+
 
 // Touch Payload Results
 // [1:count] [2:x] [2:y] [1:state]
@@ -732,32 +762,19 @@ static int process_touch_event(struct zforce *tsc, u8* payload)
 		printk("\n");
 	}
 	#endif
-	if (count != 1)
-	{
-		dev_dbg(&tsc->client->dev, "Invalid number of coordinates: %d\n", count);
-	}
-	memcpy(&x, &payload[1], sizeof(u16));
-	memcpy(&y, &payload[3], sizeof(u16));
-	status = payload[5];
 
 	if (major == 1)
 	{
+		memcpy(&x, &payload[1], sizeof(u16));
+		memcpy(&y, &payload[3], sizeof(u16));
+		status = payload[5];
 		state = status & 0x03;
 		id = 1;
-	}
-	else
-	{
-		state = (status & 0xC0) >> 6;
-		id =    (status & 0x3C) >> 2;
-	}
-
-	//x = 600 - x;
-	if (major == 1)
 		y = 800 - y;
 
-	// Process
-	switch (state)
-	{
+		// Process
+		switch (state)
+		{
 		case STATE_MOVE:
 			dev_dbg(&tsc->client->dev, "%d move(%d,%d)\n", id, x, y);
 			input_report_abs(tsc->input, ABS_X, x);
@@ -781,8 +798,29 @@ static int process_touch_event(struct zforce *tsc, u8* payload)
 		default:
 			dev_err(&tsc->client->dev, "Invalid state: %d\n", state);
 			return (count * size) + 1;
+		}
+		input_sync(tsc->input);
 	}
-	input_sync(tsc->input);
+	else
+	{
+		int i;
+		update_tinfo(tsc, payload);
+		for (i = 0; i < ZF_NUM_FINGER_SUPPORT; i++)
+		{
+			if (!tinfo[i].valid)
+				continue;
+
+			input_report_abs(tsc->input, ABS_MT_POSITION_X, tinfo[i].x);
+			input_report_abs(tsc->input, ABS_MT_POSITION_Y, tinfo[i].y);
+			input_report_abs(tsc->input, ABS_MT_TOUCH_MAJOR, tinfo[i].z);
+			input_mt_sync(tsc->input);
+
+			if (tinfo[i].state == STATE_UP)
+				tinfo[i].valid = 0;
+		}
+		input_sync(tsc->input);
+	}
+
 	return (count * size) + 1;
 }
 
@@ -1497,6 +1535,7 @@ static int zforce_probe(struct i2c_client *client,
 
 	input_set_abs_params(input_dev, ABS_MT_POSITION_X, 0, pdata->width, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_POSITION_Y, 0, pdata->height, 0, 0);
+	input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR, 0, 1000, 0, 0);
 
 	tsc->irq = client->irq;
 	tsc->err_cnt = 0;
@@ -1707,7 +1746,7 @@ static void __exit zforce_exit(void)
 module_init(zforce_init);
 module_exit(zforce_exit);
 
-MODULE_AUTHOR("Pieter Truter");
+MODULE_AUTHOR("Pieter Truter<ptruter@intrinsyc.com>");
 MODULE_DESCRIPTION("zForce TouchScreen Driver");
 MODULE_LICENSE("GPL");
 
