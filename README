@@ -1,0 +1,80 @@
+# INSTALLATION
+
+# Create a directory to store these files in
+mkdir nook2; cd nook2
+
+# Download Nook Simple Touch Glowlight 1.1.5 source code
+wget -c http://images.barnesandnoble.com/PResources/download/Nook/\
+source-code/nook2_1-1-5.tgz
+
+tar xf nook2_1-1-5.tgz
+
+# Clone git repository, move repo into source code dir:
+git clone git@github.com:staylo/nook2.git
+cp -R nook2/. distro/
+rm -rf nook2
+
+# COMPILING KERNEL
+
+# Install Linaro cross-compiler
+wget http://snapshots.linaro.org/android/~linaro-android/toolchain-4.7-\
+2012.09/1/android-toolchain-eabi-linaro-4.7-2012.09-1-2012-09-19_22-23-\
+02-linux-x86.tar.bz2
+
+tar xf android-toolchain-eabi-linaro-4.7-2012.09-1-2012-09-19_22-23-02-linux\
+-x86.tar.bz2
+
+# Copy 'Gossamer' (NOOK Simple Touch) config to active config ( .config )
+cd distro/kernel
+cp arch/arm/configs/omap3621_gossamer_evt1c_defconfig ./.config
+
+# (For USB serial converter support) Use menuconfig to add drivers to kernel
+make menuconfig
+
+	# Navigate the menu and enable the following (move cursor over the
+	# selection and press space until it is included
+	# ( icon changes from < > to <*> )
+
+	Device Drivers --->
+	USB support
+	<*>   USB Serial Converter support  --->
+
+	[*]   USB Generic Serial Driver
+	<*>   USB Garmin GPS driver
+	<*>   USB Navman GPS device (NEW)
+	<*>   USB Prolific 2303 Single Port Serial Driver
+
+	# (Select others at will, but I think these are the main ones for GPS)
+
+# Compile kernel using Linaro cross-compiler
+time make -j8 uImage ARCH=arm \
+CROSS_COMPILE=../../android-toolchain-eabi/bin/arm-linux-androideabi-
+
+# Accept defaults (press enter) to the undefined config options
+# Expected prompts:
+#  MMC logging (MMC_LOG) [N/y/?] (NEW)
+#  Panic on I/O error (MMC_PANIC_ERR) [N/y/?] (NEW)
+#  VFAT dual names support (VFAT_FS_DUALNAMES) [N/y/?] (NEW)
+
+# Expected output:
+  OBJCOPY arch/arm/boot/Image
+  Kernel: arch/arm/boot/Image is ready
+  AS      arch/arm/boot/compressed/head.o
+  GZIP    arch/arm/boot/compressed/piggy.gz
+  CC      arch/arm/boot/compressed/misc.o
+  AS      arch/arm/boot/compressed/head-omap.o
+  AS      arch/arm/boot/compressed/piggy.o
+  LD      arch/arm/boot/compressed/vmlinux
+  OBJCOPY arch/arm/boot/zImage
+  Kernel: arch/arm/boot/zImage is ready
+  UIMAGE  arch/arm/boot/uImage
+Image Name:   Linux-2.6.29-omap1
+Created:      Sun Nov  4 21:58:02 2012
+Image Type:   ARM Linux Kernel Image (uncompressed)
+Data Size:    1928636 Bytes = 1883.43 kB = 1.84 MB
+Load Address: 80008000
+Entry Point:  80008000
+  Image arch/arm/boot/uImage is ready
+
+# Now replace uImage on the boot partition of the Nook with the uImage
+# from arch/arm/boot/uImage
