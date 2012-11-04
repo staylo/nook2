@@ -69,10 +69,13 @@ static void musb_do_idle(unsigned long _musb)
 
 	switch (musb->xceiv.state) {
 	case OTG_STATE_A_WAIT_BCON:
-		devctl &= ~MUSB_DEVCTL_SESSION;
-		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
+		/* Don't reset the DEVCTL_SESSION in forced host mode */
+		if (!musb->xceiv.default_a) {
+			devctl &= ~MUSB_DEVCTL_SESSION;
+			musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
 
-		devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+			devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+		}
 		if (devctl & MUSB_DEVCTL_BDEVICE) {
 			musb->xceiv.state = OTG_STATE_B_IDLE;
 			MUSB_DEV_MODE(musb);
@@ -211,11 +214,13 @@ int musb_platform_set_mode(struct musb *musb, u8 musb_mode)
 	switch (musb_mode) {
 #ifdef CONFIG_USB_MUSB_HDRC_HCD
 	case MUSB_HOST:
+		omap_set_vbus(musb, 1);
 		otg_set_host(&musb->xceiv, musb->xceiv.host);
 		break;
 #endif
 #ifdef CONFIG_USB_GADGET_MUSB_HDRC
 	case MUSB_PERIPHERAL:
+		omap_set_vbus(musb, 0);
 		otg_set_peripheral(&musb->xceiv, musb->xceiv.gadget);
 		break;
 #endif
